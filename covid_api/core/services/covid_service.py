@@ -91,9 +91,25 @@ class CovidService:
 
     @classmethod
     def update_data(cls):
+        print(f"Started deleting previous dataset from database at: {datetime.now()}")
+        Dataset.objects.all().delete()
+        print(f"Finished deleting previous dataset from database at: {datetime.now()}")
+
+        chunksize = 10 ** 5
+        index = 0
+        for chunk in pd.read_csv(COVID_FILE_NAME, chunksize=chunksize):
+            bulk = []
+            for i, row in chunk.iterrows():
+                row_dict = row.to_dict()
+                bulk.append(Dataset(**row_dict))
+            Dataset.objects.bulk_create(bulk)
+            index += 1
+            print(f"{index * chunksize}")
+
+        '''
         print(f"Started downloading dataset at: {datetime.now()}")
         data_frame = pd.read_csv(
-            COVID_FILE_NAME,
+            cls.data_url,
             encoding='utf-8'
         )
         print(f"Finished downloading dataset at: {datetime.now()}")
@@ -116,6 +132,7 @@ class CovidService:
         print(f"100%")
 
         print(f"Finished saving dataset to database: {datetime.now()}")
+        '''
 
 
     @classmethod
