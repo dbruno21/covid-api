@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta
 import xlrd
 import pandas as pd
-from covid_api.core.models import Province
+from covid_api.core.models import Province, Dataset
 from covid_api.settings import COVID_FILE_NAME
 
 
@@ -91,13 +91,34 @@ class CovidService:
 
     @classmethod
     def update_data(cls):
+        print(f"Started downloading dataset at: {datetime.now()}")
         data_frame = pd.read_csv(
-            cls.data_url,
+            COVID_FILE_NAME,
             encoding='utf-8'
         )
-        data_frame.to_csv(COVID_FILE_NAME, index=False)
-        cls._raw_data = None
+        print(f"Finished downloading dataset at: {datetime.now()}")
 
+        print(f"Started deleting previous dataset from database at: {datetime.now()}")
+        Dataset.objects.all().delete()
+        print(f"Finished deleting previous dataset from database at: {datetime.now()}")
+
+        print(f"Started saving dataset to database: {datetime.now()}")
+        bulk = None
+        for i, row in data_frame.iterrows():
+            if i % 100000 == 0:
+                print(f"{int(i / data_frame.shape[0] * 100)}%")
+                if i != 0:
+                    Dataset.objects.bulk_create(bulk)
+                bulk = []
+            row_dict = row.to_dict()
+            bulk.append(Dataset(**row_dict))
+        Dataset.objects.bulk_create(bulk)
+        print(f"100%")
+
+        print(f"Finished saving dataset to database: {datetime.now()}")
+
+
+    @classmethod
     def population_per_province(cls):
         provinces_population = {}
         workbook = xlrd.open_workbook('poblacion.xls')
@@ -143,7 +164,6 @@ class CovidService:
         df['muertes_acum_por_millón'] = round(df['muertes_acum'] * MILLION  / population)
 
         return DataFrameWrapper(df)
-
 
     @classmethod
     def summary(cls, group_by_vector, start_date, end_date, data):

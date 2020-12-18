@@ -4,6 +4,6 @@ from covid_api.core.services import CovidService
 
 
 def update_data():
-    print(f"Start updating file at: {datetime.now()}")
+    print(f"Started database update at: {datetime.now()}")
     CovidService.update_data()
-    print(f"Finish updating file at: {datetime.now()}")
+    print(f"Finish database update at: {datetime.now()}")
