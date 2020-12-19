@@ -55,7 +55,8 @@ class ProcessDataView(APIView):
 
     def create_response(self, request, data: DatasetWrapper, **kwargs) -> Response:
         page = request.GET.get('page', 1)
-        paginator = Paginator(data.dataset, 10)
+        per_page = request.GET.get('per_page', 1000)
+        paginator = Paginator(data.dataset, per_page)
         return Response(DatasetSerializer(paginator.page(page), many=True).data)
 
     @swagger_auto_schema(
@@ -66,7 +67,8 @@ class ProcessDataView(APIView):
             ClassificationParameter(),
             DateParameter("from"),
             DateParameter("to"),
-            Parameter("page", openapi.IN_QUERY, type=openapi.TYPE_INTEGER)
+            Parameter("page", openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Used only by /province/{province_slug}/"),
+            Parameter("per_page", openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Used only by /province/{province_slug}/")
         ],
     )
     def get(self, request, **kwargs):
