@@ -1,9 +1,17 @@
 from rest_framework import serializers
+import numpy as np
 
 from covid_api.core.models import Dataset
 
 
 class DatasetSerializer(serializers.ModelSerializer):
+    edad = serializers.SerializerMethodField()
+
+    def get_edad(self, dataset):
+        if np.isnan(dataset.edad):
+            return 0
+        return dataset.edad
+
     class Meta:
         model = Dataset
         fields = '__all__'
