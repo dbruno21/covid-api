@@ -3,6 +3,9 @@ import os
 from datetime import datetime, timedelta
 import xlrd
 import pandas as pd
+import requests
+from django import db
+
 from covid_api.core.models import Province, Dataset
 from covid_api.settings import COVID_FILE_NAME
 
@@ -91,13 +94,24 @@ class CovidService:
 
     @classmethod
     def update_data(cls):
+
         print(f"Started deleting previous dataset from database at: {datetime.now()}")
         Dataset.objects.all().delete()
         print(f"Finished deleting previous dataset from database at: {datetime.now()}")
 
-        chunksize = 10 ** 5
+        print(f"Start Dowloading dataset at: {datetime.now()}")
+        response = requests.get(cls.data_url, stream=True)
+        text_file = open("data.csv", "wb")
+        for chunk in response.iter_content(chunk_size=1024):
+            text_file.write(chunk)
+        text_file.close()
+        print(f"Finished Dowloading dataset at: {datetime.now()}")
+
+        print(f"Start uploading dataset to database at: {datetime.now()}")
+        chunksize = 50000
         index = 0
-        for chunk in pd.read_csv(COVID_FILE_NAME, chunksize=chunksize):
+        for chunk in pd.read_csv("data.csv", chunksize=chunksize,
+                                 engine="python", encoding='utf-8', error_bad_lines=False):
             bulk = []
             for i, row in chunk.iterrows():
                 row_dict = row.to_dict()
@@ -105,34 +119,8 @@ class CovidService:
             Dataset.objects.bulk_create(bulk)
             index += 1
             print(f"{index * chunksize}")
-
-        '''
-        print(f"Started downloading dataset at: {datetime.now()}")
-        data_frame = pd.read_csv(
-            cls.data_url,
-            encoding='utf-8'
-        )
-        print(f"Finished downloading dataset at: {datetime.now()}")
-
-        print(f"Started deleting previous dataset from database at: {datetime.now()}")
-        Dataset.objects.all().delete()
-        print(f"Finished deleting previous dataset from database at: {datetime.now()}")
-
-        print(f"Started saving dataset to database: {datetime.now()}")
-        bulk = None
-        for i, row in data_frame.iterrows():
-            if i % 100000 == 0:
-                print(f"{int(i / data_frame.shape[0] * 100)}%")
-                if i != 0:
-                    Dataset.objects.bulk_create(bulk)
-                bulk = []
-            row_dict = row.to_dict()
-            bulk.append(Dataset(**row_dict))
-        Dataset.objects.bulk_create(bulk)
-        print(f"100%")
-
-        print(f"Finished saving dataset to database: {datetime.now()}")
-        '''
+            db.reset_queries()
+        print(f"Finished uploading dataset to database at: {datetime.now()}")
 
 
     @classmethod
