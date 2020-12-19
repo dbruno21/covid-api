@@ -4,8 +4,6 @@ import requests
 from django import db
 from datetime import datetime, timedelta
 
-from covid_api.core.models import Province, Dataset
-from covid_api.settings import COVID_FILE_NAME
 import xlrd
 from django.db.models import Max, Count, Q
 
@@ -95,33 +93,33 @@ class CovidService:
 
     @classmethod
     def update_data(cls):
-
         print(f"Started deleting previous dataset from database at: {datetime.now()}")
         Dataset.objects.all().delete()
+        print(f"Finished deleting previous dataset from database at: {datetime.now()}")
 
-        print(f"Start Dowloading dataset at: {datetime.now()}")
+        print(f"Started dowloading dataset at: {datetime.now()}")
         response = requests.get(cls.data_url, stream=True)
         text_file = open("data.csv", "wb")
         for chunk in response.iter_content(chunk_size=1024):
             text_file.write(chunk)
         text_file.close()
-        print(f"Finished Dowloading dataset at: {datetime.now()}")
+        print(f"Finished dowloading dataset at: {datetime.now()}")
 
-        print(f"Start uploading dataset to database at: {datetime.now()}")
+        print(f"Started uploading dataset to database at: {datetime.now()}")
         chunksize = 50000
-        index = 0
-        for chunk in pd.read_csv("data.csv", chunksize=chunksize,
-                                 engine="python", encoding='utf-8', error_bad_lines=False):
+        chunk_index = 0
+        row_index = 0
+        for chunk in pd.read_csv("data.csv", chunksize=chunksize, engine="python", encoding='utf-8', dtype=cls.CSV_DTYPES):
             bulk = []
             for i, row in chunk.iterrows():
                 row_dict = row.to_dict()
                 bulk.append(Dataset(**row_dict))
+                row_index += 1
             Dataset.objects.bulk_create(bulk)
-            index += 1
-            print(f"{index * chunksize}")
+            chunk_index += 1
+            print(f"Total rows read: {row_index}")
             db.reset_queries()
         print(f"Finished uploading dataset to database at: {datetime.now()}")
-
 
     @classmethod
     def provinces_stats(cls, data):
