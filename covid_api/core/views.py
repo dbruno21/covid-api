@@ -70,6 +70,8 @@ class ProcessDataView(APIView):
         ],
     )
     def get(self, request, **kwargs):
+        if not CovidService.has_data():
+            return Response({"error": "Database is empty (probably updating).. Try again later"}, 503)
         data = CovidService.get_data()
         data = self.filter_data(request, data, **kwargs)
         data = self.process_data(request, data, **kwargs)
@@ -155,6 +157,8 @@ class LastUpdateView(APIView):
     """
 
     def get(self, request, **kwargs):
+        if not CovidService.has_data():
+            return Response({"error": "Database is empty (probably updating).. Try again later"}, 503)
         data = CovidService.get_data()
         last_update = LastUpdate(data)
         return Response(LastUpdateSerializer(last_update).data)
@@ -182,6 +186,8 @@ class StatsView(APIView):
     """
 
     def get(self, requests):
+        if not CovidService.has_data():
+            return Response({"error": "Database is empty (probably updating).. Try again later"}, 503)
         data = CovidService.get_data()
         provinces_stats = CovidService.provinces_stats(data)
         return Response(StatsSerializer(provinces_stats, many=True).data)
@@ -192,6 +198,8 @@ class ProvinceStatsView(APIView):
     Returns a province stats.
     """
     def get(self, requests, province_slug=None):
+        if not CovidService.has_data():
+            return Response({"error": "Database is empty (probably updating).. Try again later"}, 503)
         data = CovidService.get_data()
         province_stats = CovidService.province_stats(data, province_slug)
         return Response(StatsSerializer(province_stats).data)

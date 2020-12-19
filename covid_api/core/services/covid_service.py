@@ -96,8 +96,12 @@ class CovidService:
         return Dataset.objects.all().count() > 0
 
     @classmethod
-    def update_data(cls):
+    def delete_data(cls):
         Dataset.objects.all().delete()
+
+    @classmethod
+    def update_data(cls):
+        cls.delete_data()
 
         print(f"Started dowloading dataset at: {datetime.now()}")
         response = requests.get(cls.data_url, stream=True)
