@@ -1,3 +1,4 @@
+from django.core.paginator import Paginator
 from drf_yasg import openapi
 from drf_yasg.openapi import Parameter
 from drf_yasg.utils import swagger_auto_schema
@@ -53,7 +54,9 @@ class ProcessDataView(APIView):
         return data
 
     def create_response(self, request, data: DatasetWrapper, **kwargs) -> Response:
-        return Response(DatasetSerializer(data.dataset, many=True).data)
+        page = request.GET.get('page', 1)
+        paginator = Paginator(data.dataset, 10)
+        return Response(DatasetSerializer(paginator.page(page), many=True).data)
 
     @swagger_auto_schema(
         manual_parameters=[
@@ -63,6 +66,7 @@ class ProcessDataView(APIView):
             ClassificationParameter(),
             DateParameter("from"),
             DateParameter("to"),
+            Parameter("page", openapi.IN_QUERY, type=openapi.TYPE_INTEGER)
         ],
     )
     def get(self, request, **kwargs):
