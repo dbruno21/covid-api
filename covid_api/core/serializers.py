@@ -4,6 +4,21 @@ import numpy as np
 from covid_api.core.models import Dataset
 
 
+class DatasetPaginatedSerializer(serializers.Serializer):
+    page = serializers.SerializerMethodField()
+    total_pages = serializers.SerializerMethodField()
+    dataset = serializers.SerializerMethodField()
+
+    def get_page(self, dataset_paginated):
+        return dataset_paginated['page']
+
+    def get_total_pages(self, dataset_paginated):
+        return dataset_paginated['total_pages']
+
+    def get_dataset(self, dataset_paginated):
+        return DatasetSerializer(dataset_paginated['dataset'], many=True).data
+
+
 class DatasetSerializer(serializers.ModelSerializer):
     edad = serializers.SerializerMethodField()
 

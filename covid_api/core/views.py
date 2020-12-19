@@ -10,7 +10,7 @@ from rest_framework_csv.renderers import CSVRenderer
 from .models import Province, Classification, CountModel, LastUpdate
 from .parameters import DateParameter, ClassificationParameter
 from .serializers import CountSerializer, StatsSerializer, LastUpdateSerializer, ProvinceSerializer, DatasetSerializer, \
-    SummarySerializer
+    SummarySerializer, DatasetPaginatedSerializer
 from .services.covid_service import CovidService, DatasetWrapper
 
 
@@ -57,7 +57,14 @@ class ProcessDataView(APIView):
         page = request.GET.get('page', 1)
         per_page = request.GET.get('per_page', 1000)
         paginator = Paginator(data.dataset, per_page)
-        return Response(DatasetSerializer(paginator.page(page), many=True).data)
+        dataset_paginated = {'page': page, 'total_pages': paginator.num_pages, 'dataset': paginator.page(page)}
+        return Response(DatasetPaginatedSerializer(
+            {
+                'page': page,
+                'total_pages': paginator.num_pages,
+                'dataset': paginator.page(page)
+            }
+        ).data)
 
     @swagger_auto_schema(
         manual_parameters=[
