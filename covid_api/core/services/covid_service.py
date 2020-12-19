@@ -92,10 +92,12 @@ class CovidService:
         return DatasetWrapper(Dataset.objects.all())
 
     @classmethod
+    def has_data(cls) -> bool:
+        return Dataset.objects.all().count() > 0
+
+    @classmethod
     def update_data(cls):
-        print(f"Started deleting previous dataset from database at: {datetime.now()}")
         Dataset.objects.all().delete()
-        print(f"Finished deleting previous dataset from database at: {datetime.now()}")
 
         print(f"Started dowloading dataset at: {datetime.now()}")
         response = requests.get(cls.data_url, stream=True)
