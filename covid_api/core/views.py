@@ -1,7 +1,3 @@
-from datetime import datetime
-from itertools import islice
-
-import xlrd
 from drf_yasg import openapi
 from drf_yasg.openapi import Parameter
 from drf_yasg.utils import swagger_auto_schema
@@ -10,21 +6,22 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_csv.renderers import CSVRenderer
 
-from .models import Province, Classification
-from .services import CovidService, DataFrameWrapper
+from .models import Province, Classification, CountModel, LastUpdate
 from .parameters import DateParameter, ClassificationParameter
+from .serializers import CountSerializer, StatsSerializer, LastUpdateSerializer, ProvinceSerializer, DatasetSerializer, \
+    SummarySerializer
+from .services.covid_service import CovidService, DatasetWrapper
 
 
 # ----- GENERIC VIEWS ----- #
-
 class ProcessDataView(APIView):
 
     renderer_classes = [JSONRenderer, CSVRenderer]
 
-    def process_data(self, request, data: DataFrameWrapper, **kwargs) -> DataFrameWrapper:
+    def process_data(self, request, data: DatasetWrapper, **kwargs) -> DatasetWrapper:
         return data
 
-    def filter_data(self, request, data: DataFrameWrapper, **kwargs) -> DataFrameWrapper:
+    def filter_data(self, request, data: DatasetWrapper, **kwargs) -> DatasetWrapper:
         classification = request.GET.get('classification', None)
         if classification is not None:
             classification = Classification.translate(classification.lower())
@@ -55,9 +52,8 @@ class ProcessDataView(APIView):
                 data = data.filter_le('fecha_diagnostico', to_date)
         return data
 
-    def create_response(self, request, data: DataFrameWrapper, **kwargs) -> Response:
-
-        return Response(data.to_json())
+    def create_response(self, request, data: DatasetWrapper, **kwargs) -> Response:
+        return Response(DatasetSerializer(data.dataset, many=True).data)
 
     @swagger_auto_schema(
         manual_parameters=[
@@ -84,8 +80,9 @@ class CountView(ProcessDataView):
 
     renderer_classes = [JSONRenderer, ]
 
-    def create_response(self, request, data: DataFrameWrapper, **kwargs) -> Response:
-        return Response({'count': data.count()})
+    def create_response(self, request, data: DatasetWrapper, **kwargs) -> Response:
+        count = CountModel(data)
+        return Response(CountSerializer(count).data)
 
 
 # --- PROVINCE VIEWS --- #
@@ -95,7 +92,7 @@ class ProvinceListView(ProcessDataView):
     Returns the cases for the given province
     """
 
-    def process_data(self, request, data: DataFrameWrapper, province_slug=None, **kwargs) -> Response:
+    def process_data(self, request, data: DatasetWrapper, province_slug=None, **kwargs) -> DatasetWrapper:
         province = Province.from_slug(province_slug)
         summary = data.filter_eq(
             'carga_provincia_nombre',
@@ -113,22 +110,25 @@ class ProvinceCountView(ProvinceListView, CountView):
 
 class ProvinceSummaryView(ProcessDataView):
 
-    def process_data(self, request, data: DataFrameWrapper, province_slug=None, **kwargs) -> DataFrameWrapper:
-        from_date = request.GET.get('from', None)
-        to_date = request.GET.get('to', None)
+    def process_data(self, request, data: DatasetWrapper, province_slug=None, **kwargs) -> list:
+        start_date = request.GET.get('from', None)
+        end_date = request.GET.get('to', None)
 
         province = Province.from_slug(province_slug)
 
-        summary = data.filter_eq(
+        province_data = data.filter_eq(
             'carga_provincia_nombre',
             province
         )
 
         if province:
-            summary = CovidService.summary(['carga_provincia_nombre'], from_date, to_date, summary)
-            summary = CovidService.population_summary_metrics(summary,province_slug)
+            summary = CovidService.summary(province_data, start_date, end_date, province_slug)
+            return summary
 
-        return summary
+        return []
+
+    def create_response(self, request, data: list, **kwargs) -> Response:
+        return Response(SummarySerializer(data, many=True).data)
 
 
 # --- PROVINCES VIEWS --- #
@@ -139,8 +139,8 @@ class ProvincesListView(APIView):
     """
 
     def get(self, request) -> Response:
-        province_array = [{'slug': slug, 'province': province} for slug, province in Province.PROVINCES.items()]
-        return Response(province_array)
+        provinces = [Province(slug, province) for slug, province in Province.PROVINCES.items()]
+        return Response(ProvinceSerializer(provinces, many=True).data)
 
 
 # --- LAST UPDATE VIEW --- #
@@ -152,23 +152,23 @@ class LastUpdateView(APIView):
 
     def get(self, request, **kwargs):
         data = CovidService.get_data()
-        last_update = data['ultima_actualizacion'].max()
-        return Response({'last_update': last_update})
+        last_update = LastUpdate(data)
+        return Response(LastUpdateSerializer(last_update).data)
 
 
 # --- COUNTRY SUMMARY VIEW --- #
 
 class CountrySummaryView(ProcessDataView):
 
-    def process_data(self, request, data: DataFrameWrapper, **kwargs) -> DataFrameWrapper:
-        from_date = request.GET.get('from', None)
-        to_date = request.GET.get('to', None)
+    def process_data(self, request, data: DatasetWrapper, **kwargs) -> list:
+        start_date = request.GET.get('from', None)
+        end_date = request.GET.get('to', None)
 
-        summary = CovidService.summary([], from_date, to_date, data)
-
-        summary = CovidService.population_summary_metrics(summary, None)
-
+        summary = CovidService.summary(data, start_date, end_date)
         return summary
+
+    def create_response(self, request, data: list, **kwargs) -> Response:
+        return Response(SummarySerializer(data, many=True).data)
 
 
 # --- METRICS VIEW --- #
@@ -177,80 +177,17 @@ class StatsView(APIView):
     Returns the provinces and country stats.
     """
 
-    def province_stats(self, province_name, province_data, population):
-        # Get population from 2020
-        cases_amount = province_data.count()
-        cases_per_million = cases_amount * 1000000 / population
-        cases_per_hundred_thousand = cases_amount * 100000 / population
-        dead_amount = province_data.filter_eq('fallecido', 'SI').count()
-        dead_per_million = dead_amount * 1000000 / population
-        dead_per_hundred_thousand = dead_amount * 100000 / population
-        stats = {
-                'provincia': province_name,
-                'población': int(population),
-                'muertes_por_millón': round(dead_per_million),
-                'muertes_cada_cien_mil': round(dead_per_hundred_thousand),
-                'casos_por_millón': round(cases_per_million),
-                'casos_cada_cien_mil': round(cases_per_hundred_thousand),
-                'letalidad': round(dead_amount / cases_amount, 4),
-            }
-        return stats
-
     def get(self, requests):
-        workbook = xlrd.open_workbook('poblacion.xls')
-        response = []
         data = CovidService.get_data()
-        # Filter the data
-        data = data.filter_eq('clasificacion_resumen', 'Confirmado')
-        for worksheet in workbook.sheets():
-            split_name = worksheet.name.split('-')
-            if len(split_name) < 2:
-                continue
-
-            province_slug = split_name[0]
-            province_name = Province.from_slug(province_slug)
-            if province_name:
-                province_data = data.copy().filter_eq(
-                    'carga_provincia_nombre',
-                    province_name
-                )
-                population = worksheet.cell(16, 1).value
-            else:
-                province_data = data.copy()
-                province_name = "Argentina"
-                population = worksheet.cell(15, 1).value
-
-            province_stats = self.province_stats(
-                province_name,
-                province_data,
-                population
-            )
-            response.append(province_stats)
-
-        return Response(response)
+        provinces_stats = CovidService.provinces_stats(data)
+        return Response(StatsSerializer(provinces_stats, many=True).data)
 
 
-class ProvinceStatsView(StatsView):
+class ProvinceStatsView(APIView):
     """
     Returns a province stats.
     """
     def get(self, requests, province_slug=None):
-        workbook = xlrd.open_workbook('poblacion.xls')
         data = CovidService.get_data()
-        # Filter the data
-        data = data.filter_eq('clasificacion_resumen', 'Confirmado')
-        province_name = Province.from_slug(province_slug)
-        province_data = data.filter_eq(
-            'carga_provincia_nombre',
-            province_name
-        )
-        sheet_name = f'{province_slug}-{province_name.upper()}'
-        population = workbook.sheet_by_name(sheet_name).cell(16, 1).value
-
-        province_stats = self.province_stats(
-            province_name,
-            province_data,
-            population
-        )
-
-        return Response(province_stats)
+        province_stats = CovidService.province_stats(data, province_slug)
+        return Response(StatsSerializer(province_stats).data)

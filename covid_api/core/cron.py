@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from covid_api.core.services import CovidService
+from covid_api.core.services.covid_service import CovidService
 
 
 def update_data():
