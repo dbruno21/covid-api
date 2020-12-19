@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import requests
 from django import db
+from datetime import datetime, timedelta
 
 from covid_api.core.models import Province, Dataset
 from covid_api.settings import COVID_FILE_NAME
@@ -115,7 +116,6 @@ class CovidService:
             for i, row in chunk.iterrows():
                 row_dict = row.to_dict()
                 bulk.append(Dataset(**row_dict))
-                row_index += 1
             Dataset.objects.bulk_create(bulk)
             index += 1
             print(f"{index * chunksize}")
