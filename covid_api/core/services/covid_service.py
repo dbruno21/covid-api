@@ -163,7 +163,6 @@ class CovidService:
         )
         sheet_name = f'{province_slug}-{province_name.upper()}'
         population = workbook.sheet_by_name(sheet_name).cell(16, 1).value
->>>>>>> c402634bc9bd0b9d11287507b17b819254a1544d
 
         province_stats = Stats(province_name, province_data, population)
         return province_stats
