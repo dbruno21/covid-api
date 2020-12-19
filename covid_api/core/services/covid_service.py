@@ -1,56 +1,47 @@
-import json
-import os
-from datetime import datetime, timedelta
-import xlrd
+import numpy as np
 import pandas as pd
-from covid_api.core.models import Province, Dataset
-from covid_api.settings import COVID_FILE_NAME
+import xlrd
+from django.db.models import Max, Count, Q
+
+from covid_api.core.models import Province, Dataset, Stats, SummaryEntry
 
 
-class DataFrameWrapper:
-    data_frame = None
+class DatasetWrapper:
 
-    def __init__(self, data_frame):
-        self.data_frame = data_frame
+    def __init__(self, dataset):
+        self.dataset = dataset
 
     def count(self):
         # Count rows
-        return len(self.data_frame.index)
+        return self.dataset.count()
+
+    def max(self, column):
+        return self.dataset.aggregate(max=Max(column))['max']
+
+    def group_by(self, columns):
+        self.dataset = self.dataset.values(*columns)
+        return self
+
+    def annotate(self, aggregations):
+        return self.dataset.annotate(**aggregations)
 
     def copy(self):
-        return DataFrameWrapper(self.data_frame.copy())
+        return DatasetWrapper(self.dataset)
 
     def filter_eq(self, column, value):
-        self.data_frame = self.data_frame.loc[self.data_frame[column] == value]
+        key = column
+        self.dataset = self.dataset.filter(**{key: value})
         return self
 
     def filter_ge(self, column, value):
-        self.data_frame = self.data_frame.loc[self.data_frame[column] >= value]
+        key = f'{column}__gte'
+        self.dataset = self.dataset.filter(**{key: value})
         return self
 
     def filter_le(self, column, value):
-        self.data_frame = self.data_frame.loc[self.data_frame[column] <= value]
+        key = f'{column}__lte'
+        self.dataset = self.dataset.filter(**{key: value})
         return self
-
-    def group_by(self, columns):
-        self.data_frame = self.data_frame.groupby(columns)
-        return self
-
-    def size(self):
-        self.data_frame = self.data_frame.size()
-        return self
-
-    def summary(self):
-        self.data_frame = self.data_frame.describe()
-        return self
-
-    def to_json(self, orient="table"):
-        df = self.data_frame.reset_index(drop=True)
-        json_string = df.to_json(orient=orient)
-        return json.loads(json_string)['data']
-
-    def __getitem__(self, column):
-        return self.data_frame[column]
 
 
 class CovidService:
@@ -64,76 +55,98 @@ class CovidService:
 
     last_refresh = None
 
+    CSV_DTYPES = {
+        'id_evento_caso': np.int64,
+        'sexo': np.str,
+        'edad': np.float64,
+        'edad_años_meses': np.str,
+        'residencia_pais_nombre': np.str,
+        'residencia_provincia_nombre': np.str,
+        'residencia_departamento_nombre': np.str,
+        'carga_provincia_nombre': np.str,
+        'fecha_inicio_sintomas': np.str,
+        'fecha_apertura': np.str,
+        'sepi_apertura': np.int64,
+        'fecha_internacion': np.str,
+        'cuidado_intensivo': np.str,
+        'fecha_cui_intensivo': np.str,
+        'fallecido': np.str,
+        'fecha_fallecimiento': np.str,
+        'asistencia_respiratoria_mecanica': np.str,
+        'carga_provincia_id': np.int64,
+        'origen_financiamiento': np.str,
+        'clasificacion': np.str,
+        'clasificacion_resumen': np.str,
+        'residencia_provincia_id': np.int64,
+        'fecha_diagnostico': np.str,
+        'residencia_departamento_id': np.int64,
+        'ultima_actualizacion': np.str,
+    }
+
     @classmethod
-    def get_data(cls) -> DataFrameWrapper:
-        is_time_to_refresh = True
-
-        if cls.last_refresh:
-            refresh_time = cls.last_refresh + timedelta(hours=cls.refresh_rate)
-            is_time_to_refresh = refresh_time < datetime.now()
-
-        if cls._raw_data is None or is_time_to_refresh:
-            if not os.path.isfile(COVID_FILE_NAME):
-                # Update the data from the url and save the file
-                cls.update_data()
-
-            cls._raw_data = pd.read_csv(
-                COVID_FILE_NAME,
-                encoding='utf-8'
-            )
-            # Get the base hour
-            cls.last_refresh = datetime.now().replace(
-                minute=0,
-                second=0,
-                microsecond=0
-            )
-        return DataFrameWrapper(cls._raw_data)
+    def get_data(cls) -> DatasetWrapper:
+        return DatasetWrapper(Dataset.objects.all())
 
     @classmethod
     def update_data(cls):
-        print(f"Started deleting previous dataset from database at: {datetime.now()}")
         Dataset.objects.all().delete()
-        print(f"Finished deleting previous dataset from database at: {datetime.now()}")
 
         chunksize = 10 ** 5
-        index = 0
-        for chunk in pd.read_csv(COVID_FILE_NAME, chunksize=chunksize):
+        chunk_index = 0
+        row_index = 0
+        for chunk in pd.read_csv(cls.data_url, chunksize=chunksize, dtype=cls.CSV_DTYPES):
             bulk = []
             for i, row in chunk.iterrows():
                 row_dict = row.to_dict()
                 bulk.append(Dataset(**row_dict))
+                row_index += 1
             Dataset.objects.bulk_create(bulk)
-            index += 1
-            print(f"{index * chunksize}")
+            chunk_index += 1
+            print(f"Total rows read: {row_index}")
 
-        '''
-        print(f"Started downloading dataset at: {datetime.now()}")
-        data_frame = pd.read_csv(
-            cls.data_url,
-            encoding='utf-8'
+    @classmethod
+    def provinces_stats(cls, data):
+        workbook = xlrd.open_workbook('poblacion.xls')
+        provinces_stats = []
+        # Filter the data
+        data = data.filter_eq('clasificacion_resumen', 'Confirmado')
+        for worksheet in workbook.sheets():
+            split_name = worksheet.name.split('-')
+            if len(split_name) < 2:
+                continue
+
+            province_slug = split_name[0]
+            province_name = Province.from_slug(province_slug)
+            if province_name:
+                province_data = data.copy().filter_eq(
+                    'carga_provincia_nombre',
+                    province_name
+                )
+                population = worksheet.cell(16, 1).value
+            else:
+                province_data = data.copy()
+                province_name = "Argentina"
+                population = worksheet.cell(15, 1).value
+
+            province_stats = Stats(province_name, province_data, population)
+            provinces_stats.append(province_stats)
+        return provinces_stats
+
+    @classmethod
+    def province_stats(cls, data, province_slug):
+        workbook = xlrd.open_workbook('poblacion.xls')
+        # Filter the data
+        data = data.filter_eq('clasificacion_resumen', 'Confirmado')
+        province_name = Province.from_slug(province_slug)
+        province_data = data.filter_eq(
+            'carga_provincia_nombre',
+            province_name
         )
-        print(f"Finished downloading dataset at: {datetime.now()}")
+        sheet_name = f'{province_slug}-{province_name.upper()}'
+        population = workbook.sheet_by_name(sheet_name).cell(16, 1).value
 
-        print(f"Started deleting previous dataset from database at: {datetime.now()}")
-        Dataset.objects.all().delete()
-        print(f"Finished deleting previous dataset from database at: {datetime.now()}")
-
-        print(f"Started saving dataset to database: {datetime.now()}")
-        bulk = None
-        for i, row in data_frame.iterrows():
-            if i % 100000 == 0:
-                print(f"{int(i / data_frame.shape[0] * 100)}%")
-                if i != 0:
-                    Dataset.objects.bulk_create(bulk)
-                bulk = []
-            row_dict = row.to_dict()
-            bulk.append(Dataset(**row_dict))
-        Dataset.objects.bulk_create(bulk)
-        print(f"100%")
-
-        print(f"Finished saving dataset to database: {datetime.now()}")
-        '''
-
+        province_stats = Stats(province_name, province_data, population)
+        return province_stats
 
     @classmethod
     def population_per_province(cls):
@@ -153,73 +166,44 @@ class CovidService:
                 country_population = worksheet.cell(15, 1).value
 
         provinces_population['ARG'] = country_population
-
         return provinces_population
 
     @classmethod
-    def population_summary_metrics(cls, dfw, slug):
-
-        if slug:
-            population = cls.population_per_province(cls)[slug]
-        else:
-            population = cls.population_per_province(cls)['ARG']
-
-        HUNDRED_THOUSAND = 100000
-        MILLION = 1000000
-        df = dfw.data_frame
-
-        # per hundred thousand
-        df['casos_cada_cien_mil'] = round(df['casos'] * HUNDRED_THOUSAND/population)
-        df['muertes_cada_cien_mil'] = round(df['muertes'] * HUNDRED_THOUSAND/population)
-        df['casos_acum_cada_cien_mil'] = round(df['casos_acum'] * HUNDRED_THOUSAND/population)
-        df['muertes_acum_cada_cien_mil'] = round(df['muertes_acum'] * HUNDRED_THOUSAND/population)
-
-        # per million
-        df['casos_por_millón'] = round(df['casos'] * MILLION / population)
-        df['muertes_por_millón'] = round(df['muertes'] * MILLION  / population)
-        df['casos_acum_por_millón'] = round(df['casos_acum'] * MILLION  / population)
-        df['muertes_acum_por_millón'] = round(df['muertes_acum'] * MILLION  / population)
-
-        return DataFrameWrapper(df)
-
-    @classmethod
-    def summary(cls, group_by_vector, start_date, end_date, data):
-
+    def summary(cls, data, start_date, end_date, province_slug=None):
         start_date = start_date if start_date else '2020-02-11'
-
         if not end_date:
-            end_date = CovidService.get_data()['ultima_actualizacion'].max()
-
-        summary = data.data_frame
+            end_date = data.max('ultima_actualizacion')
 
         raw_range = pd.date_range(start=start_date, end=end_date)
         range_strings = raw_range.format(formatter=lambda x: x.strftime('%Y-%m-%d'))
-        df = pd.DataFrame(range_strings, columns=['fecha_diagnostico'])
+        if province_slug:
+            population = cls.population_per_province()[province_slug]
+        else:
+            population = cls.population_per_province()['ARG']
 
-        cases_count = summary.groupby(
-            [elem for elem in group_by_vector] + ['fecha_diagnostico'],
-            as_index=False
-        ).count()
-        df2 = cases_count[['fecha_diagnostico']].copy()
-        df2['casos'] = cases_count['id_evento_caso']
+        cases_results = data.copy().group_by(['fecha_diagnostico']).annotate({"cases": Count('*')})
+        cases_results_by_key = {cases_result['fecha_diagnostico']: cases_result for cases_result in cases_results}
 
-        summary = summary.loc[summary['fallecido'] == 'SI']
-        deaths_count = summary.groupby(
-            [elem for elem in group_by_vector] + ['fecha_fallecimiento'],
-            as_index=False
-        ).count()[['fecha_fallecimiento', 'id_evento_caso']]
-        deaths_count = deaths_count.rename(
-            columns={'id_evento_caso': "muertes", 'fecha_fallecimiento': "fecha_diagnostico"})
+        deaths_results = data.copy().group_by(['fecha_fallecimiento']).annotate({"deaths": Count('fallecido', filter=Q(fallecido='SI'))})
+        deaths_results_by_key = {deaths_result['fecha_fallecimiento']: deaths_result for deaths_result in deaths_results}
 
-        df = df.merge(df2, on='fecha_diagnostico', how='left')
-        df = df.merge(deaths_count, on='fecha_diagnostico', how='left')
+        summary = []
+        cases_acum = 0
+        deaths_acum = 0
+        for date in range_strings:
+            if date in cases_results_by_key:
+                cases_acum += cases_results_by_key[date]['cases']
+            if date in deaths_results_by_key:
+                deaths_acum += deaths_results_by_key[date]['deaths']
+            params = {
+                "date": date,
+                "cases": cases_results_by_key[date]['cases'] if date in cases_results_by_key else 0,
+                "deaths": deaths_results_by_key[date]['deaths'] if date in deaths_results_by_key else 0,
+                "cases_acum": cases_acum,
+                "deaths_acum": deaths_acum,
+                "population": population
+            }
+            summary_entry = SummaryEntry(**params)
+            summary.append(summary_entry)
 
-        df = df.fillna(value=0)
-
-        df['muertes_acum'] = df['muertes'].cumsum()
-        df['casos_acum'] = df['casos'].cumsum()
-
-        df = df.rename(
-            columns={'fecha_diagnostico': "fecha"})
-
-        return DataFrameWrapper(df)
+        return summary

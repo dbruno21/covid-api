@@ -1,6 +1,8 @@
 from django.db import models
 
 # Create your models here.
+
+
 class Province:
 
     # Source: https://sitioanterior.indec.gob.ar/ftp/cuadros/menusuperior/clasificadores/anexo1_resol55_2019.pdf
@@ -34,6 +36,10 @@ class Province:
     @classmethod
     def from_slug(cls, slug):
         return cls.PROVINCES.get(slug, None)
+
+    def __init__(self, slug, province):
+        self.slug = slug
+        self.province = province
 
 
 class Classification:
@@ -76,3 +82,57 @@ class Dataset(models.Model):
     fecha_diagnostico = models.TextField(null=True)
     residencia_departamento_id = models.IntegerField(null=True)
     ultima_actualizacion = models.TextField(null=True)
+
+
+class CountModel:
+    def __init__(self, data):
+        self.count = data.count()
+
+
+class LastUpdate:
+    def __init__(self, data):
+        self.last_update = data.max('ultima_actualizacion')
+
+
+class Stats:
+    def __init__(self, province_name, province_data, population):
+        # Get population from 2020
+        cases_amount = province_data.count()
+        print(cases_amount)
+        cases_per_million = cases_amount * 1000000 / population
+        cases_per_hundred_thousand = cases_amount * 100000 / population
+        dead_amount = province_data.filter_eq('fallecido', 'SI').count()
+        dead_per_million = dead_amount * 1000000 / population
+        dead_per_hundred_thousand = dead_amount * 100000 / population
+        self.provincia = province_name
+        self.población = int(population)
+        self.muertes_por_millón = round(dead_per_million)
+        self.muertes_cada_cien_mil = round(dead_per_hundred_thousand)
+        self.casos_por_millón = round(cases_per_million)
+        self.casos_cada_cien_mil = round(cases_per_hundred_thousand)
+        self.letalidad = round(dead_amount / cases_amount, 4)
+
+
+class SummaryEntry:
+
+    HUNDRED_THOUSAND = 100000
+    MILLION = 1000000
+
+    def __init__(self, date, cases, deaths, cases_acum, deaths_acum, population):
+        self.fecha = date
+        self.casos = cases
+        self.muertes = deaths
+        self.casos_acum = cases_acum
+        self.muertes_acum = deaths_acum
+
+        # per hundred thousand
+        self.casos_cada_cien_mil = round(cases * self.HUNDRED_THOUSAND / population)
+        self.muertes_cada_cien_mil = round(deaths * self.HUNDRED_THOUSAND / population)
+        self.casos_acum_cada_cien_mil = round(cases_acum * self.HUNDRED_THOUSAND / population)
+        self.muertes_acum_cada_cien_mil = round(deaths_acum * self.HUNDRED_THOUSAND / population)
+
+        # per million
+        self.casos_por_millón = round(cases * self.MILLION / population)
+        self.muertes_por_millón = round(deaths * self.MILLION / population)
+        self.casos_acum_por_millón = round(cases_acum * self.MILLION / population)
+        self.muertes_acum_por_millón = round(deaths_acum * self.MILLION / population)
