@@ -55,7 +55,7 @@ class ProcessDataView(APIView):
 
     def create_response(self, request, data: DatasetWrapper, **kwargs) -> Response:
         page = request.GET.get('page', 1)
-        per_page = request.GET.get('per_page', 1000)
+        per_page = request.GET.get('per_page', 20000)
         paginator = Paginator(data.dataset, per_page)
         dataset_paginated = {'page': page, 'total_pages': paginator.num_pages, 'dataset': paginator.page(page)}
         return Response(DatasetPaginatedSerializer(
