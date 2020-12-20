@@ -1,4 +1,5 @@
 from django.db import models
+from postgres_copy import CopyManager
 
 # Create your models here.
 
@@ -82,6 +83,8 @@ class Dataset(models.Model):
     fecha_diagnostico = models.TextField(null=True)
     residencia_departamento_id = models.IntegerField(null=True)
     ultima_actualizacion = models.TextField(null=True)
+
+    objects = CopyManager()
 
 
 class CountModel:

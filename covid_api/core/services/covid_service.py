@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 from django import db
 from datetime import datetime, timedelta
+from postgres_copy import CopyManager
 
 import xlrd
 from django.db.models import Max, Count, Q
@@ -112,19 +113,7 @@ class CovidService:
         print(f"Finished dowloading dataset at: {datetime.now()}")
 
         print(f"Started uploading dataset to database at: {datetime.now()}")
-        chunksize = 50000
-        chunk_index = 0
-        row_index = 0
-        for chunk in pd.read_csv("data.csv", chunksize=chunksize, engine="python", encoding='utf-8', dtype=cls.CSV_DTYPES):
-            bulk = []
-            for i, row in chunk.iterrows():
-                row_dict = row.to_dict()
-                bulk.append(Dataset(**row_dict))
-                row_index += 1
-            Dataset.objects.bulk_create(bulk)
-            chunk_index += 1
-            print(f"Total rows read: {row_index}")
-            db.reset_queries()
+        Dataset.objects.from_csv("data.csv", drop_constraints=False, drop_indexes=False)
         print(f"Finished uploading dataset to database at: {datetime.now()}")
 
     @classmethod

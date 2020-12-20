@@ -12,3 +12,4 @@ djangorestframework-csv==2.1.0
 xlrd==1.2.0
 psycopg2==2.8.6
 requests~=2.25.1
+django-postgres-copy==2.4.2
