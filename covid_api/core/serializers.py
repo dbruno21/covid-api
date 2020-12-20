@@ -21,11 +21,53 @@ class DatasetPaginatedSerializer(serializers.Serializer):
 
 class DatasetSerializer(serializers.ModelSerializer):
     edad = serializers.SerializerMethodField()
+    fecha_inicio_sintomas = serializers.SerializerMethodField()
+    fecha_apertura = serializers.SerializerMethodField()
+    fecha_internacion = serializers.SerializerMethodField()
+    fecha_cui_intensivo = serializers.SerializerMethodField()
+    fecha_fallecimiento = serializers.SerializerMethodField()
+    fecha_diagnostico = serializers.SerializerMethodField()
+    ultima_actualizacion = serializers.SerializerMethodField()
 
     def get_edad(self, dataset):
         if np.isnan(dataset.edad):
             return 0
         return dataset.edad
+
+    def get_fecha_inicio_sintomas(self, dataset):
+        if dataset.fecha_inicio_sintomas == "nan":
+            return None
+        return dataset.fecha_inicio_sintomas
+
+    def get_fecha_apertura(self, dataset):
+        if dataset.fecha_apertura == "nan":
+            return None
+        return dataset.fecha_apertura
+
+    def get_fecha_internacion(self, dataset):
+        if dataset.fecha_internacion == "nan":
+            return None
+        return dataset.fecha_internacion
+
+    def get_fecha_cui_intensivo(self, dataset):
+        if dataset.fecha_cui_intensivo == "nan":
+            return None
+        return dataset.fecha_cui_intensivo
+
+    def get_fecha_fallecimiento(self, dataset):
+        if dataset.fecha_fallecimiento == "nan":
+            return None
+        return dataset.fecha_fallecimiento
+
+    def get_fecha_diagnostico(self, dataset):
+        if dataset.fecha_diagnostico == "nan":
+            return None
+        return dataset.fecha_diagnostico
+
+    def get_ultima_actualizacion(self, dataset):
+        if dataset.ultima_actualizacion == "nan":
+            return None
+        return dataset.ultima_actualizacion
 
     class Meta:
         model = Dataset
