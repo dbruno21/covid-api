@@ -101,7 +101,6 @@ class Stats:
     def __init__(self, province_name, province_data, population):
         # Get population from 2020
         cases_amount = province_data.count()
-        print(cases_amount)
         cases_per_million = cases_amount * 1000000 / population
         cases_per_hundred_thousand = cases_amount * 100000 / population
         dead_amount = province_data.filter_eq('fallecido', 'SI').count()
