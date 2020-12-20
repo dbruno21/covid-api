@@ -2,71 +2,52 @@
 
 This API uses the [Argentinian Ministry of Health (msal.gob.ar) dataset](http://datos.salud.gob.ar/dataset/covid-19-casos-registrados-en-la-republica-argentina)
 
+## Description
+
+This is a fork of [alavarello/covid-api](https://github.com/alavarello/covid-api) that uses Django ORM (QuerySets) for querying the dataset using a database instead of doing it all in memory with pandas. 
+
+The default configured database to be used is PostgreSQL. We use Docker to do all the process of setting the database up and running the http server with a cron already configured to update the database every day.
+
+### Requirements
+
+* [Git](https://git-scm.com/)
+* [Docker](https://www.docker.com/)
+
 ## Installation
 
-Clone the repository using ssh or http
+1. Clone the repository using SSH or HTTP
 
 ```shell script
-# Clone repo using ssh
-git clone git@github.com:alavarello/covid-api.git
-# Clone repo using http
-git clone https://github.com/alavarello/covid-api.git
+git clone git@github.com:alavarello/covid-api.git  # with SSH
+git clone https://github.com/alavarello/covid-api.git  # with HTTP
+cd covid-api
 ``` 
-
-Create the virtual environment and install all the requirements.\
-For more information about virtual environments click [here](https://docs.python.org/3/library/venv.html#module-venv) \
-The global python version must be > 3.6
+2. Copy .env file
 
 ```shell script
-# Create a virtual environment
-python -m venv env
-# Activate
-source env/bin/activate  # On Windows use `env\Scripts\activate`
-
-# Install Django and Django REST framework into the virtual environment
-pip install -r requirements.txt
-
-# Run migrations
-python manage.py migrate
-
-# Create .env file
-cp docs/env.txt covid_api/.env  # In development
-cp docs/env_production.txt covid_api/.env # In production
+cp docs/env.txt covid_api/.env  # in development
+cp docs/env_production.txt covid_api/.env  # in production
 ```
 
 **Important**: Once you copy the env file change the secret key for a random string 
 
-## Update data
+## Run (with docker)
 
-**Important**: Always make sure you have the `env` activated before running any command.
+3. Run (inside repository root folder)
 
-To add the cron that updates the data.
 ```shell script
-python manage.py crontab add
+docker-compose up
 ```
 
-To force the update
+### Manually update data
+
 ```shell script
-python manage.py update_data
+docker exec -it covid-api_web_1 bash
+python manage.py update_data  # wait for update to finish
+exit
 ```
 
 **Note**: This may take up to an hour to update.
- 
-## Run
-
-**Important**: Always make sure you have the `env` activated before running any command.
-
-### Development
-Make sure the port 8000 is not being used.
-```shell script
-python manage.py runserver
-```
-
-### Production
-Make sure the port 8000 is not being used.
-```shell script
-gunicorn covid_api.wsgi --workers 3 --timeout 600 --bind 0.0.0.0:8000 -D
-```
 
 ## Docs
 ```shell script
