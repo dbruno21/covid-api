@@ -18,8 +18,8 @@ The default configured database to be used is PostgreSQL. We use Docker to do al
 1. Clone the repository using SSH or HTTP
 
 ```shell script
-git clone git@github.com:alavarello/covid-api.git  # with SSH
-git clone https://github.com/alavarello/covid-api.git  # with HTTP
+git clone git@github.com:dbruno21/covid-api.git  # with SSH
+git clone https://github.com/dbruno21/covid-api.git  # with HTTP
 cd covid-api
 ``` 
 2. Copy .env file
