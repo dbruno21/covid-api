@@ -30,9 +30,10 @@ class DatasetSerializer(serializers.ModelSerializer):
     ultima_actualizacion = serializers.SerializerMethodField()
 
     def get_edad(self, dataset):
-        if np.isnan(dataset.edad):
-            return 0
-        return dataset.edad
+        try:
+            return None if np.isnan(dataset.edad) else dataset.edad
+        except TypeError:
+            return None
 
     def get_fecha_inicio_sintomas(self, dataset):
         if dataset.fecha_inicio_sintomas == "nan":
