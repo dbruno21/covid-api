@@ -98,12 +98,12 @@ class LastUpdate:
 
 
 class Stats:
-    def __init__(self, province_name, province_data, population):
+    def __init__(self, province_name, cases, deaths, population):
         # Get population from 2020
-        cases_amount = province_data.count()
+        cases_amount = cases
         cases_per_million = cases_amount * 1000000 / population
         cases_per_hundred_thousand = cases_amount * 100000 / population
-        dead_amount = province_data.filter_eq('fallecido', 'SI').count()
+        dead_amount = deaths
         dead_per_million = dead_amount * 1000000 / population
         dead_per_hundred_thousand = dead_amount * 100000 / population
         self.provincia = province_name

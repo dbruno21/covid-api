@@ -118,53 +118,59 @@ class CovidService:
 
     @classmethod
     def provinces_stats(cls, data):
-        workbook = xlrd.open_workbook('poblacion.xls')
         provinces_stats = []
         # Filter the data
         data = data.filter_eq('clasificacion_resumen', 'Confirmado')
-        for worksheet in workbook.sheets():
-            split_name = worksheet.name.split('-')
-            if len(split_name) < 2:
-                continue
-
-            province_slug = split_name[0]
-            province_name = Province.from_slug(province_slug)
-            if province_name:
-                province_data = data.copy().filter_eq(
-                    'carga_provincia_nombre',
-                    province_name
-                )
-                population = worksheet.cell(16, 1).value
-            else:
-                province_data = data.copy()
-                province_name = "Argentina"
-                population = worksheet.cell(15, 1).value
-
-            province_stats = Stats(province_name, province_data, population)
+        results = data.group_by(['carga_provincia_nombre']).annotate({"cases": Count('*'), "deaths": Count('fallecido', filter=Q(fallecido='SI'))})
+        results_by_key = {result['carga_provincia_nombre']: result for result in results}
+        population = cls.population_per_province()
+        sum_cases = 0
+        sum_deaths = 0
+        for slug, province_name in Province.PROVINCES.items():
+            sum_cases += results_by_key[province_name]['cases'] if province_name in results_by_key else 0
+            sum_deaths += results_by_key[province_name]['deaths'] if province_name in results_by_key else 0
+            params = {
+                "province_name": province_name,
+                "cases": results_by_key[province_name]['cases'] if province_name in results_by_key else 0,
+                "deaths": results_by_key[province_name]['deaths'] if province_name in results_by_key else 0,
+                "population": population[slug]
+            }
+            province_stats = Stats(**params)
             provinces_stats.append(province_stats)
+        params = {
+            "province_name": "Argentina",
+            "cases": sum_cases,
+            "deaths": sum_deaths,
+            "population": population['ARG']
+        }
+        country_stats = Stats(**params)
+        provinces_stats.insert(0, country_stats)
         return provinces_stats
 
     @classmethod
     def province_stats(cls, data, province_slug):
-        workbook = xlrd.open_workbook('poblacion.xls')
         # Filter the data
         data = data.filter_eq('clasificacion_resumen', 'Confirmado')
         province_name = Province.from_slug(province_slug)
-        province_data = data.filter_eq(
+        data = data.filter_eq(
             'carga_provincia_nombre',
             province_name
         )
-        sheet_name = f'{province_slug}-{province_name.upper()}'
-        population = workbook.sheet_by_name(sheet_name).cell(16, 1).value
-
-        province_stats = Stats(province_name, province_data, population)
+        results = data.group_by(['carga_provincia_nombre']).annotate({"cases": Count('*'), "deaths": Count('fallecido', filter=Q(fallecido='SI'))})
+        results_by_key = {result['carga_provincia_nombre']: result for result in results}
+        params = {
+            "province_name": province_name,
+            "cases": results_by_key[province_name]['cases'] if province_name in results_by_key else 0,
+            "deaths": results_by_key[province_name]['deaths'] if province_name in results_by_key else 0,
+            "population": cls.population_per_province()[province_slug]
+        }
+        province_stats = Stats(**params)
         return province_stats
 
     @classmethod
     def population_per_province(cls):
         provinces_population = {}
         workbook = xlrd.open_workbook('poblacion.xls')
-
         for worksheet in workbook.sheets():
             split_name = worksheet.name.split('-')
             if len(split_name) < 2:
@@ -175,9 +181,8 @@ class CovidService:
                 provinces_population[province_slug] = worksheet.cell(16, 1).value
                 continue
             else:
-                country_population = worksheet.cell(15, 1).value
+                provinces_population['ARG'] = worksheet.cell(15, 1).value
 
-        provinces_population['ARG'] = country_population
         return provinces_population
 
     @classmethod
@@ -188,10 +193,11 @@ class CovidService:
 
         raw_range = pd.date_range(start=start_date, end=end_date)
         range_strings = raw_range.format(formatter=lambda x: x.strftime('%Y-%m-%d'))
+        population_per_province = cls.population_per_province()
         if province_slug:
-            population = cls.population_per_province()[province_slug]
+            population = population_per_province[province_slug]
         else:
-            population = cls.population_per_province()['ARG']
+            population = population_per_province['ARG']
 
         cases_results = data.copy().group_by(['fecha_diagnostico']).annotate({"cases": Count('*')})
         cases_results_by_key = {cases_result['fecha_diagnostico']: cases_result for cases_result in cases_results}
