@@ -20,7 +20,6 @@ class DatasetPaginatedSerializer(serializers.Serializer):
 
 
 class DatasetSerializer(serializers.ModelSerializer):
-    edad = serializers.SerializerMethodField()
     fecha_inicio_sintomas = serializers.SerializerMethodField()
     fecha_apertura = serializers.SerializerMethodField()
     fecha_internacion = serializers.SerializerMethodField()
@@ -28,12 +27,6 @@ class DatasetSerializer(serializers.ModelSerializer):
     fecha_fallecimiento = serializers.SerializerMethodField()
     fecha_diagnostico = serializers.SerializerMethodField()
     ultima_actualizacion = serializers.SerializerMethodField()
-
-    def get_edad(self, dataset):
-        try:
-            return None if np.isnan(dataset.edad) else dataset.edad
-        except TypeError:
-            return None
 
     def get_fecha_inicio_sintomas(self, dataset):
         if dataset.fecha_inicio_sintomas == "nan":
@@ -72,7 +65,33 @@ class DatasetSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Dataset
-        fields = '__all__'
+        fields = (
+            'id_evento_caso',
+            'sexo',
+            'edad',
+            'edad_años_meses',
+            'residencia_pais_nombre',
+            'residencia_provincia_nombre',
+            'residencia_departamento_nombre',
+            'carga_provincia_nombre',
+            'fecha_inicio_sintomas',
+            'fecha_apertura',
+            'sepi_apertura',
+            'fecha_internacion',
+            'cuidado_intensivo',
+            'fecha_cui_intensivo',
+            'fallecido',
+            'fecha_fallecimiento',
+            'asistencia_respiratoria_mecanica',
+            'carga_provincia_id',
+            'origen_financiamiento',
+            'clasificacion',
+            'clasificacion_resumen',
+            'residencia_provincia_id',
+            'fecha_diagnostico',
+            'residencia_departamento_id',
+            'ultima_actualizacion'
+        )
 
 
 class CountSerializer(serializers.Serializer):
